@@ -1,0 +1,1137 @@
+openapi: 3.1.0
+info:
+  title: Smart Crop Advisory System API
+  version: 1.0.0
+  description: >
+    RESTful API for the Smart Crop Advisory System — a multilingual, AI-powered
+    platform for small and marginal farmers in India.
+
+servers:
+  - url: /api/v1
+    description: Version 1
+
+# ─── Security ─────────────────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # ── Envelope ──────────────────────────────────────────────────────────────
+    SuccessEnvelope:
+      type: object
+      required: [status, data, error]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: object
+          nullable: true
+        error:
+          type: object
+          nullable: true
+          example: null
+
+    ErrorEnvelope:
+      type: object
+      required: [status, data, error]
+      properties:
+        status:
+          type: string
+          enum: [error]
+        data:
+          type: object
+          nullable: true
+          example: null
+        error:
+          $ref: '#/components/schemas/ErrorObject'
+
+    ErrorObject:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - VALIDATION_ERROR
+            - UNAUTHORIZED
+            - FORBIDDEN
+            - NOT_FOUND
+            - DUPLICATE_MOBILE
+            - INVALID_OTP
+            - INVALID_REFRESH_TOKEN
+            - INCOMPLETE_SOIL_PROFILE
+            - NO_SOIL_PROFILE
+            - MISSING_PARAM
+            - MISSING_FILE
+            - UNSUPPORTED_MEDIA_TYPE
+            - PAYLOAD_TOO_LARGE
+            - ADVISORY_ENGINE_UNAVAILABLE
+            - VISION_ENGINE_UNAVAILABLE
+            - WEATHER_UNAVAILABLE
+            - MARKET_UNAVAILABLE
+            - OTP_SERVICE_UNAVAILABLE
+            - STT_ERROR
+            - TTS_ERROR
+            - INTERNAL_ERROR
+        message:
+          type: string
+        field:
+          type: string
+          description: Identifies the invalid field (validation errors only)
+
+    # ── Farmer ────────────────────────────────────────────────────────────────
+    FarmerProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        mobileNumber:
+          type: string
+          example: '+919876543210'
+        name:
+          type: string
+          example: Gurpreet Singh
+        preferredLang:
+          type: string
+          enum: [en, hi, pa]
+        village:
+          type: string
+        district:
+          type: string
+        state:
+          type: string
+        landSizeAcres:
+          type: number
+          format: float
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    FarmerProfileUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        preferredLang:
+          type: string
+          enum: [en, hi, pa]
+        village:
+          type: string
+        district:
+          type: string
+        state:
+          type: string
+        landSizeAcres:
+          type: number
+          format: float
+
+    # ── Soil Profile ──────────────────────────────────────────────────────────
+    SoilProfileData:
+      type: object
+      required: [soilType, ph]
+      properties:
+        plotName:
+          type: string
+        latitude:
+          type: number
+          format: float
+        longitude:
+          type: number
+          format: float
+        soilType:
+          type: string
+          example: loamy
+        ph:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 14
+        nitrogen:
+          type: number
+          format: float
+          minimum: 0
+        phosphorus:
+          type: number
+          format: float
+          minimum: 0
+        potassium:
+          type: number
+          format: float
+          minimum: 0
+
+    SoilProfile:
+      allOf:
+        - type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            farmerId:
+              type: string
+              format: uuid
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+        - $ref: '#/components/schemas/SoilProfileData'
+
+    # ── Advisory ──────────────────────────────────────────────────────────────
+    CropRecommendation:
+      type: object
+      properties:
+        cropName:
+          type: string
+        rank:
+          type: integer
+        expectedYieldRange:
+          type: string
+          example: '25-30 quintals/acre'
+        waterRequirement:
+          type: string
+          example: '400-500 mm'
+        estimatedInputCost:
+          type: string
+          example: '₹8,000/acre'
+
+    FertilizerApplication:
+      type: object
+      properties:
+        fertilizer:
+          type: string
+        quantity:
+          type: string
+          example: '50 kg/acre'
+        timing:
+          type: string
+          example: 'At sowing'
+        type:
+          type: string
+          enum: [chemical, organic]
+
+    FertilizerSchedule:
+      type: object
+      properties:
+        cropId:
+          type: string
+        cropName:
+          type: string
+        applications:
+          type: array
+          items:
+            $ref: '#/components/schemas/FertilizerApplication'
+        soilAmendments:
+          type: array
+          items:
+            type: string
+          description: Lime/sulfur recommendations when pH is out of optimal range
+
+    # ── Image Analysis ────────────────────────────────────────────────────────
+    TreatmentOption:
+      type: object
+      properties:
+        name:
+          type: string
+        dosage:
+          type: string
+        method:
+          type: string
+
+    DiagnosisResult:
+      type: object
+      properties:
+        pestOrDisease:
+          type: string
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        treatments:
+          type: object
+          properties:
+            chemical:
+              type: array
+              items:
+                $ref: '#/components/schemas/TreatmentOption'
+            organic:
+              type: array
+              items:
+                $ref: '#/components/schemas/TreatmentOption'
+        lowConfidence:
+          type: boolean
+        extensionOfficerReferral:
+          type: boolean
+
+    # ── Weather ───────────────────────────────────────────────────────────────
+    ForecastItem:
+      type: object
+      properties:
+        time:
+          type: string
+          format: date-time
+        temp:
+          type: number
+        rain:
+          type: number
+
+    WeatherData:
+      type: object
+      properties:
+        lat:
+          type: number
+        lon:
+          type: number
+        temperature:
+          type: number
+        humidity:
+          type: number
+        rainfall24h:
+          type: number
+        frostRisk:
+          type: boolean
+        forecast:
+          type: array
+          items:
+            $ref: '#/components/schemas/ForecastItem'
+        lastUpdated:
+          type: string
+          format: date-time
+
+    # ── Market Prices ─────────────────────────────────────────────────────────
+    MandiPrice:
+      type: object
+      properties:
+        mandiName:
+          type: string
+        district:
+          type: string
+        minPrice:
+          type: number
+        maxPrice:
+          type: number
+        modalPrice:
+          type: number
+        distance:
+          type: number
+          description: Distance in km from farmer's location
+        lastUpdated:
+          type: string
+          format: date-time
+
+    MarketPriceResponse:
+      type: object
+      properties:
+        crop:
+          type: string
+        mandis:
+          type: array
+          items:
+            $ref: '#/components/schemas/MandiPrice'
+        stale:
+          type: boolean
+          description: True when data is older than 24 hours
+        cachedAt:
+          type: string
+          format: date-time
+
+    # ── Notifications ─────────────────────────────────────────────────────────
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        farmerId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [weather_alert, frost_alert]
+        payload:
+          type: object
+          additionalProperties: true
+        sentAt:
+          type: string
+          format: date-time
+
+    # ── Feedback / Dashboard ──────────────────────────────────────────────────
+    DashboardReport:
+      type: object
+      properties:
+        totalSessions:
+          type: integer
+        averageRating:
+          type: number
+          format: float
+        sessionsByType:
+          type: object
+          additionalProperties:
+            type: integer
+        ratingDistribution:
+          type: object
+          additionalProperties:
+            type: integer
+
+  # ── Reusable responses ─────────────────────────────────────────────────────
+  responses:
+    Unauthorized:
+      description: Missing or invalid JWT
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            status: error
+            data: null
+            error:
+              code: UNAUTHORIZED
+              message: Authentication required
+
+    Forbidden:
+      description: Insufficient role
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            status: error
+            data: null
+            error:
+              code: FORBIDDEN
+              message: Access restricted to officers and administrators
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+    ServiceUnavailable:
+      description: Upstream service unavailable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+# ─── Default security (overridden per-operation for public endpoints) ──────────
+security:
+  - bearerAuth: []
+
+# ─── Paths ────────────────────────────────────────────────────────────────────
+paths:
+
+  # ── Auth ────────────────────────────────────────────────────────────────────
+  /auth/register:
+    post:
+      summary: Send OTP to mobile number
+      operationId: authRegister
+      tags: [Auth]
+      security: []   # public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mobileNumber]
+              properties:
+                mobileNumber:
+                  type: string
+                  example: '+919876543210'
+      responses:
+        '200':
+          description: OTP sent successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          message:
+                            type: string
+                            example: OTP sent
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /auth/verify-otp:
+    post:
+      summary: Verify OTP and receive tokens
+      operationId: authVerifyOtp
+      tags: [Auth]
+      security: []   # public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mobileNumber, otp]
+              properties:
+                mobileNumber:
+                  type: string
+                otp:
+                  type: string
+                  example: '123456'
+      responses:
+        '200':
+          description: OTP verified — tokens issued
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          accessToken:
+                            type: string
+                          refreshToken:
+                            type: string
+                          farmerId:
+                            type: string
+                            format: uuid
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/refresh:
+    post:
+      summary: Refresh access token
+      operationId: authRefresh
+      tags: [Auth]
+      security: []   # public (uses refresh token in body)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [farmerId, refreshToken]
+              properties:
+                farmerId:
+                  type: string
+                  format: uuid
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: New access and refresh tokens issued
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          accessToken:
+                            type: string
+                          refreshToken:
+                            type: string
+                          farmerId:
+                            type: string
+                            format: uuid
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/logout:
+    post:
+      summary: Logout and invalidate refresh token
+      operationId: authLogout
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          message:
+                            type: string
+                            example: Logged out successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ── Farmers ─────────────────────────────────────────────────────────────────
+  /farmers/me:
+    get:
+      summary: Get authenticated farmer's profile
+      operationId: getFarmerMe
+      tags: [Farmers]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Farmer profile
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/FarmerProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Update authenticated farmer's profile
+      operationId: updateFarmerMe
+      tags: [Farmers]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FarmerProfileUpdate'
+      responses:
+        '200':
+          description: Updated farmer profile
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/FarmerProfile'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Soil Profiles ────────────────────────────────────────────────────────────
+  /soil-profiles:
+    post:
+      summary: Create a new soil profile
+      operationId: createSoilProfile
+      tags: [Soil Profiles]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SoilProfileData'
+      responses:
+        '201':
+          description: Soil profile created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SoilProfile'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /soil-profiles/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      summary: Get a soil profile by ID
+      operationId: getSoilProfile
+      tags: [Soil Profiles]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Soil profile
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SoilProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Update a soil profile
+      operationId: updateSoilProfile
+      tags: [Soil Profiles]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SoilProfileData'
+      responses:
+        '200':
+          description: Updated soil profile
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SoilProfile'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Advisory ─────────────────────────────────────────────────────────────────
+  /advisory/crops:
+    get:
+      summary: Get crop recommendations for a plot
+      operationId: getCropRecommendations
+      tags: [Advisory]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: plotId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ranked crop recommendations
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/CropRecommendation'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /advisory/fertilizer:
+    get:
+      summary: Get fertilizer schedule for a crop and plot
+      operationId: getFertilizerGuidance
+      tags: [Advisory]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: plotId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: cropId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Fertilizer schedule
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/FertilizerSchedule'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  # ── Images ───────────────────────────────────────────────────────────────────
+  /images/analyze:
+    post:
+      summary: Analyze a crop image for pest or disease
+      operationId: analyzeImage
+      tags: [Images]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: JPEG or PNG image, max 10 MB
+      responses:
+        '200':
+          description: Diagnosis result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DiagnosisResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          description: File too large (max 10 MB)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '415':
+          description: Unsupported media type (JPEG and PNG only)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  # ── Weather ──────────────────────────────────────────────────────────────────
+  /weather:
+    get:
+      summary: Get weather data for a location
+      operationId: getWeather
+      tags: [Weather]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+            format: float
+        - name: lon
+          in: query
+          required: true
+          schema:
+            type: number
+            format: float
+      responses:
+        '200':
+          description: Weather data (may be cached up to 6 hours)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/WeatherData'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  # ── Market Prices ─────────────────────────────────────────────────────────────
+  /market-prices:
+    get:
+      summary: Get market prices for a crop
+      operationId: getMarketPrices
+      tags: [Market Prices]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: crop
+          in: query
+          required: true
+          schema:
+            type: string
+            example: wheat
+      responses:
+        '200':
+          description: Market prices from nearby mandis (may be cached up to 12 hours)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/MarketPriceResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  # ── Voice ─────────────────────────────────────────────────────────────────────
+  /voice/stt:
+    post:
+      summary: Convert audio to text (speech-to-text)
+      operationId: speechToText
+      tags: [Voice]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: language
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [en, hi, pa]
+            default: en
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [audio]
+              properties:
+                audio:
+                  type: string
+                  format: binary
+                  description: Audio file (any format supported by Google Cloud STT)
+      responses:
+        '200':
+          description: Transcript
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          transcript:
+                            type: string
+                          confidence:
+                            type: number
+                            format: float
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /voice/tts:
+    post:
+      summary: Convert text to speech audio
+      operationId: textToSpeech
+      tags: [Voice]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text:
+                  type: string
+                language:
+                  type: string
+                  enum: [en, hi, pa]
+                  default: en
+      responses:
+        '200':
+          description: MP3 audio binary
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  # ── Feedback ──────────────────────────────────────────────────────────────────
+  /feedback:
+    post:
+      summary: Submit or dismiss feedback for an advisory session
+      operationId: submitFeedback
+      tags: [Feedback]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sessionId]
+              properties:
+                sessionId:
+                  type: string
+                  format: uuid
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                  description: Rating 1–5 (provide either rating or dismiss)
+                dismiss:
+                  type: boolean
+                  description: Set true to dismiss without rating
+      responses:
+        '200':
+          description: Feedback recorded
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          ok:
+                            type: boolean
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ── Dashboard ─────────────────────────────────────────────────────────────────
+  /dashboard/reports:
+    get:
+      summary: Get aggregated usage and feedback reports (officer/admin only)
+      operationId: getDashboardReports
+      tags: [Dashboard]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: role
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [officer, admin]
+          description: Caller's role (must be officer or admin)
+      responses:
+        '200':
+          description: Aggregated report
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DashboardReport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ── Notifications ─────────────────────────────────────────────────────────────
+  /notifications:
+    get:
+      summary: Get notifications for the authenticated farmer
+      operationId: getNotifications
+      tags: [Notifications]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of notifications ordered by most recent first
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Notification'
+        '401':
+          $ref: '#/components/responses/Unauthorized'

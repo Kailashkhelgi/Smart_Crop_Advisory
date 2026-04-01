@@ -1,0 +1,52 @@
+# ── Secrets / environment files ──────────────────────────────────────────────
+.env
+*.env
+.env.*
+!.env.example
+backend/.env
+backend-java/.env
+backend-java/src/main/resources/application-local.properties
+
+# ── Node.js ───────────────────────────────────────────────────────────────────
+node_modules/
+dist/
+.npm/
+
+# ── Java / Maven ──────────────────────────────────────────────────────────────
+target/
+*.class
+*.jar
+*.war
+*.ear
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.hypothesis/
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+env/
+
+# ── IDE / OS ──────────────────────────────────────────────────────────────────
+.idea/
+.vscode/settings.json
+*.iml
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Kiro internal ─────────────────────────────────────────────────────────────
+.kiro/settings/
