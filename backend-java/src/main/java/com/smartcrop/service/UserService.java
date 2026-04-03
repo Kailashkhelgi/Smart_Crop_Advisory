@@ -14,7 +14,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.util.UriComponentsBuilder;
 
 import java.security.SecureRandom;
 import java.time.Duration;
@@ -51,22 +50,19 @@ public class UserService {
             return;
         }
 
-        // Strip country code prefix — Fast2SMS expects 10-digit Indian number
+        // Strip country code — 2Factor expects 10-digit Indian number
         String number = mobileNumber.replaceAll("^\\+91", "").replaceAll("^91", "");
 
         try {
-            String url = UriComponentsBuilder
-                .fromHttpUrl("https://www.fast2sms.com/dev/bulkV2")
-                .queryParam("authorization", apiKey)
-                .queryParam("variables_values", otp)
-                .queryParam("route", "otp")
-                .queryParam("numbers", number)
-                .toUriString();
-
+            // 2Factor.in OTP API: https://2factor.in/API/V1/{api_key}/SMS/{phone}/{otp}
+            String url = String.format(
+                "https://2factor.in/API/V1/%s/SMS/%s/%s/Smart%%20Crop%%20OTP",
+                apiKey, number, otp
+            );
             String response = restTemplate.getForObject(url, String.class);
-            log.info("Fast2SMS response for {}: {}", number, response);
+            log.info("2Factor response for {}: {}", number, response);
         } catch (Exception e) {
-            log.error("Failed to send OTP via Fast2SMS: {}", e.getMessage());
+            log.error("Failed to send OTP via 2Factor: {}", e.getMessage());
         }
     }
 
