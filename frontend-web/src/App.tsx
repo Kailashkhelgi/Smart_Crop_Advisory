@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import RegisterPage from './pages/auth/RegisterPage';
-import VerifyOtpPage from './pages/auth/VerifyOtpPage';
 import ProfilePage from './pages/ProfilePage';
 import SoilProfilePage from './pages/SoilProfilePage';
 import CropAdvisoryPage from './pages/CropAdvisoryPage';
@@ -12,7 +11,7 @@ import VoicePage from './pages/VoicePage';
 import DashboardPage from './pages/DashboardPage';
 
 type Page =
-  | 'home' | 'register' | 'login' | 'verify-otp'
+  | 'home' | 'register' | 'login'
   | 'dashboard' | 'profile' | 'soil-profile' | 'crop-advisory'
   | 'fertilizer' | 'weather' | 'image-analysis' | 'market-price'
   | 'voice' | 'admin-dashboard';
@@ -132,34 +131,10 @@ export default function App() {
         <Navbar />
         <RegisterPage
           mode={page === 'login' ? 'login' : 'register'}
-          onNavigate={(target, state) => {
-            if (target === 'verify-otp') {
-              navigate('verify-otp', state);
-            } else if (target === 'login') {
-              navigate('login');
-            } else {
-              navigate(target);
-            }
-          }}
-        />
-      </>
-    );
-  }
-
-  if (page === 'verify-otp') {
-    return (
-      <>
-        <Navbar />
-        <VerifyOtpPage
-          mobileNumber={routeState.mobileNumber ?? ''}
           onNavigate={(target) => {
             if (target === 'home') {
               setIsLoggedIn(true);
-              setRouteState({});
               navigate('dashboard');
-            } else if (target === 'register') {
-              setRouteState({});
-              navigate('register');
             } else {
               navigate(target);
             }

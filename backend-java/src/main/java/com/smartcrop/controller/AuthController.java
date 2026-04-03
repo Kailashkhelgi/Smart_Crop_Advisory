@@ -19,16 +19,16 @@ public class AuthController {
     private final UserService userService;
 
     @PostMapping("/register")
-    public ResponseEntity<ApiResponse<Map<String, String>>> register(
+    public ResponseEntity<ApiResponse<TokenResponse>> register(
             @Valid @RequestBody RegisterRequest req) {
-        userService.sendOtp(req.getMobileNumber());
-        return ResponseEntity.ok(ApiResponse.success(Map.of("message", "OTP sent")));
+        TokenResponse tokens = userService.register(req.getMobileNumber(), req.getPassword());
+        return ResponseEntity.ok(ApiResponse.success(tokens));
     }
 
-    @PostMapping("/verify-otp")
-    public ResponseEntity<ApiResponse<TokenResponse>> verifyOtp(
-            @Valid @RequestBody VerifyOtpRequest req) {
-        TokenResponse tokens = userService.verifyOtp(req.getMobileNumber(), req.getOtp());
+    @PostMapping("/login")
+    public ResponseEntity<ApiResponse<TokenResponse>> login(
+            @Valid @RequestBody LoginRequest req) {
+        TokenResponse tokens = userService.login(req.getMobileNumber(), req.getPassword());
         return ResponseEntity.ok(ApiResponse.success(tokens));
     }
 

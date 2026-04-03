@@ -11,11 +11,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestTemplate;
 
-import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
@@ -30,71 +29,67 @@ public class UserService {
     private final StringRedisTemplate redis;
     private final JwtUtil jwtUtil;
     private final AppProperties appProperties;
-    private final RestTemplate restTemplate;
 
-    private static final SecureRandom RANDOM = new SecureRandom();
-
-    // In-memory fallback when Redis is unavailable
-    private static final Map<String, String> OTP_STORE = new ConcurrentHashMap<>();
+    private static final BCryptPasswordEncoder BCRYPT = new BCryptPasswordEncoder();
     private static final Map<String, String> REFRESH_STORE = new ConcurrentHashMap<>();
 
-    // ── OTP ──────────────────────────────────────────────────────────────────
+    // ── Register ──────────────────────────────────────────────────────────────
 
-    public void sendOtp(String mobileNumber) {
-        String otp = String.format("%06d", RANDOM.nextInt(1_000_000));
-        storeOtp(mobileNumber, otp);
-
-        String apiKey = appProperties.getOtp().getProvider().getApiKey();
-        if (apiKey == null || apiKey.equals("dev_key")) {
-            log.info("[DEV] OTP for {}: {}", mobileNumber, otp);
-            return;
+    @Transactional
+    public TokenResponse register(String mobileNumber, String password) {
+        if (farmerRepository.findByMobileNumber(mobileNumber).isPresent()) {
+            throw new AppException("ALREADY_REGISTERED", "Mobile number already registered", HttpStatus.CONFLICT);
         }
-
-        // Strip country code — 2Factor expects 10-digit Indian number
-        String number = mobileNumber.replaceAll("^\\+91", "").replaceAll("^91", "");
-
-        try {
-            // 2Factor.in OTP API: https://2factor.in/API/V1/{api_key}/SMS/{phone}/{otp}
-            String url = String.format(
-                "https://2factor.in/API/V1/%s/SMS/%s/%s/Smart%%20Crop%%20OTP",
-                apiKey, number, otp
-            );
-            String response = restTemplate.getForObject(url, String.class);
-            log.info("2Factor response for {}: {}", number, response);
-        } catch (Exception e) {
-            log.error("Failed to send OTP via 2Factor: {}", e.getMessage());
-        }
+        String hash = BCRYPT.encode(password);
+        Farmer farmer = farmerRepository.save(
+            Farmer.builder().mobileNumber(mobileNumber).passwordHash(hash).build()
+        );
+        return issueTokens(farmer);
     }
 
-    private void storeOtp(String mobile, String otp) {
-        try {
-            redis.opsForValue().set("otp:" + mobile, otp, Duration.ofMinutes(10));
-        } catch (Exception e) {
-            log.warn("Redis unavailable, using in-memory OTP store");
-            OTP_STORE.put("otp:" + mobile, otp);
+    // ── Login ─────────────────────────────────────────────────────────────────
+
+    public TokenResponse login(String mobileNumber, String password) {
+        Farmer farmer = farmerRepository.findByMobileNumber(mobileNumber)
+            .orElseThrow(() -> new AppException("NOT_FOUND", "Mobile number not registered", HttpStatus.UNAUTHORIZED));
+
+        if (farmer.getPasswordHash() == null || !BCRYPT.matches(password, farmer.getPasswordHash())) {
+            throw new AppException("INVALID_CREDENTIALS", "Invalid mobile number or password", HttpStatus.UNAUTHORIZED);
         }
+        return issueTokens(farmer);
     }
 
-    private String getOtp(String mobile) {
-        try {
-            return redis.opsForValue().get("otp:" + mobile);
-        } catch (Exception e) {
-            return OTP_STORE.get("otp:" + mobile);
-        }
+    // ── Token helpers ─────────────────────────────────────────────────────────
+
+    private TokenResponse issueTokens(Farmer farmer) {
+        String accessToken = jwtUtil.generateAccessToken(farmer.getId());
+        String refreshToken = UUID.randomUUID().toString();
+        storeRefresh(farmer.getId().toString(), refreshToken);
+        return new TokenResponse(accessToken, refreshToken, farmer.getId().toString());
     }
 
-    private void deleteOtp(String mobile) {
-        try {
-            redis.delete("otp:" + mobile);
-        } catch (Exception e) {
-            OTP_STORE.remove("otp:" + mobile);
+    public TokenResponse refreshToken(String farmerId, String refreshToken) {
+        String stored = getRefresh(farmerId);
+        if (stored == null || !stored.equals(refreshToken)) {
+            throw AppException.unauthorized("Refresh token is invalid or has expired");
         }
+        UUID id = UUID.fromString(farmerId);
+        String newAccess = jwtUtil.generateAccessToken(id);
+        String newRefresh = UUID.randomUUID().toString();
+        storeRefresh(farmerId, newRefresh);
+        return new TokenResponse(newAccess, newRefresh, farmerId);
     }
+
+    public void logout(String farmerId) {
+        deleteRefresh(farmerId);
+    }
+
+    // ── Redis / in-memory refresh store ──────────────────────────────────────
 
     private void storeRefresh(String farmerId, String token) {
         try {
-            long refreshMs = appProperties.getJwt().getRefreshExpirationMs();
-            redis.opsForValue().set("refresh:" + farmerId, token, Duration.ofMillis(refreshMs));
+            long ms = appProperties.getJwt().getRefreshExpirationMs();
+            redis.opsForValue().set("refresh:" + farmerId, token, Duration.ofMillis(ms));
         } catch (Exception e) {
             REFRESH_STORE.put("refresh:" + farmerId, token);
         }
@@ -114,42 +109,6 @@ public class UserService {
         } catch (Exception e) {
             REFRESH_STORE.remove("refresh:" + farmerId);
         }
-    }
-
-    @Transactional
-    public TokenResponse verifyOtp(String mobileNumber, String otp) {
-        String stored = getOtp(mobileNumber);
-        if (stored == null || !stored.equals(otp)) {
-            throw new AppException("INVALID_OTP", "OTP is invalid or has expired", HttpStatus.UNAUTHORIZED);
-        }
-        deleteOtp(mobileNumber);
-
-        Farmer farmer = farmerRepository.findByMobileNumber(mobileNumber)
-            .orElseGet(() -> farmerRepository.save(
-                Farmer.builder().mobileNumber(mobileNumber).build()
-            ));
-
-        String accessToken = jwtUtil.generateAccessToken(farmer.getId());
-        String refreshToken = UUID.randomUUID().toString();
-        storeRefresh(farmer.getId().toString(), refreshToken);
-
-        return new TokenResponse(accessToken, refreshToken, farmer.getId().toString());
-    }
-
-    public TokenResponse refreshToken(String farmerId, String refreshToken) {
-        String stored = getRefresh(farmerId);
-        if (stored == null || !stored.equals(refreshToken)) {
-            throw AppException.unauthorized("Refresh token is invalid or has expired");
-        }
-        UUID id = UUID.fromString(farmerId);
-        String newAccess = jwtUtil.generateAccessToken(id);
-        String newRefresh = UUID.randomUUID().toString();
-        storeRefresh(farmerId, newRefresh);
-        return new TokenResponse(newAccess, newRefresh, farmerId);
-    }
-
-    public void logout(String farmerId) {
-        deleteRefresh(farmerId);
     }
 
     // ── Profile ───────────────────────────────────────────────────────────────

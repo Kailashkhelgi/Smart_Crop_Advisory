@@ -1,15 +1,13 @@
 package com.smartcrop.dto.auth;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 @Data
-public class RegisterRequest {
+public class LoginRequest {
     @NotBlank(message = "mobileNumber is required")
     private String mobileNumber;
 
     @NotBlank(message = "password is required")
-    @Size(min = 6, message = "password must be at least 6 characters")
     private String password;
 }

@@ -81,11 +81,11 @@ export default apiClient;
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const authApi = {
-  register: (mobileNumber: string) =>
-    apiClient.post('/auth/register', { mobileNumber }),
+  register: (mobileNumber: string, password: string) =>
+    apiClient.post('/auth/register', { mobileNumber, password }),
 
-  verifyOtp: (mobileNumber: string, otp: string) =>
-    apiClient.post('/auth/verify-otp', { mobileNumber, otp }),
+  login: (mobileNumber: string, password: string) =>
+    apiClient.post('/auth/login', { mobileNumber, password }),
 
   refresh: (farmerId: string, refreshToken: string) =>
     apiClient.post('/auth/refresh', { farmerId, refreshToken }),

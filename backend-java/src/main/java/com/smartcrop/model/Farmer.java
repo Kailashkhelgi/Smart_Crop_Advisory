@@ -43,6 +43,9 @@ public class Farmer {
     @Column(name = "land_size_acres", precision = 8, scale = 2)
     private BigDecimal landSizeAcres;
 
+    @Column(name = "password_hash")
+    private String passwordHash;
+
     @Column(name = "fcm_token")
     private String fcmToken;
 
