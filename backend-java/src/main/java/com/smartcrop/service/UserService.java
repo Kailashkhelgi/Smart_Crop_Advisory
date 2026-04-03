@@ -13,6 +13,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.security.SecureRandom;
 import java.time.Duration;
@@ -29,6 +31,7 @@ public class UserService {
     private final StringRedisTemplate redis;
     private final JwtUtil jwtUtil;
     private final AppProperties appProperties;
+    private final RestTemplate restTemplate;
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -41,7 +44,30 @@ public class UserService {
     public void sendOtp(String mobileNumber) {
         String otp = String.format("%06d", RANDOM.nextInt(1_000_000));
         storeOtp(mobileNumber, otp);
-        log.info("[DEV] OTP for {}: {}", mobileNumber, otp);
+
+        String apiKey = appProperties.getOtp().getProvider().getApiKey();
+        if (apiKey == null || apiKey.equals("dev_key")) {
+            log.info("[DEV] OTP for {}: {}", mobileNumber, otp);
+            return;
+        }
+
+        // Strip country code prefix — Fast2SMS expects 10-digit Indian number
+        String number = mobileNumber.replaceAll("^\\+91", "").replaceAll("^91", "");
+
+        try {
+            String url = UriComponentsBuilder
+                .fromHttpUrl("https://www.fast2sms.com/dev/bulkV2")
+                .queryParam("authorization", apiKey)
+                .queryParam("variables_values", otp)
+                .queryParam("route", "otp")
+                .queryParam("numbers", number)
+                .toUriString();
+
+            String response = restTemplate.getForObject(url, String.class);
+            log.info("Fast2SMS response for {}: {}", number, response);
+        } catch (Exception e) {
+            log.error("Failed to send OTP via Fast2SMS: {}", e.getMessage());
+        }
     }
 
     private void storeOtp(String mobile, String otp) {
