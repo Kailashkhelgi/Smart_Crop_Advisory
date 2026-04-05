@@ -134,7 +134,8 @@ export default function App() {
           onNavigate={(target) => {
             if (target === 'home') {
               setIsLoggedIn(true);
-              navigate('dashboard');
+              setPage('dashboard');
+              window.scrollTo(0, 0);
             } else {
               navigate(target);
             }
@@ -143,7 +144,6 @@ export default function App() {
       </>
     );
   }
-
   // ── Authenticated app layout ─────────────────────────────────────────────
   return (
     <>

@@ -6,6 +6,8 @@ interface ProfilePageProps {
 }
 
 export default function ProfilePage({ onNavigate }: ProfilePageProps) {
+  const [mobileNumber, setMobileNumber] = useState('');
+  const [farmerId, setFarmerId] = useState('');
   const [form, setForm] = useState({
     name: '', preferredLang: 'en', village: '', district: '', state: '', landSizeAcres: '',
   });
@@ -15,15 +17,11 @@ export default function ProfilePage({ onNavigate }: ProfilePageProps) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-    if (!token || token.startsWith('demo-')) {
-      setError('Please log in to view your profile.');
-      setLoading(false);
-      return;
-    }
     farmerApi.getProfile()
       .then(res => {
         const d = res.data?.data ?? res.data;
+        setMobileNumber(d.mobileNumber ?? '');
+        setFarmerId(d.id ?? localStorage.getItem('farmerId') ?? '');
         setForm({
           name: d.name ?? '',
           preferredLang: d.preferredLang ?? 'en',
@@ -36,7 +34,7 @@ export default function ProfilePage({ onNavigate }: ProfilePageProps) {
       .catch(err => {
         const msg = err?.response?.data?.error?.message
           ?? err?.response?.data?.message
-          ?? 'Failed to load profile. Please try again.';
+          ?? (err?.response?.status === 401 ? 'Session expired. Please log out and log in again.' : 'Failed to load profile.')
         setError(msg);
       })
       .finally(() => setLoading(false));
@@ -77,6 +75,22 @@ export default function ProfilePage({ onNavigate }: ProfilePageProps) {
         {error && <div className="alert alert-error">{error}</div>}
         {success && <div className="alert alert-success">{success}</div>}
 
+        {/* Read-only info */}
+        <div style={{ background: '#f1f8e9', borderRadius: 8, padding: '1rem', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: '0.78rem', color: '#666', marginBottom: 2 }}>Mobile Number</div>
+              <div style={{ fontWeight: 600, color: 'var(--green-dark)' }}>{mobileNumber || '—'}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.78rem', color: '#666', marginBottom: 2 }}>Farmer ID</div>
+              <div style={{ fontWeight: 600, color: 'var(--green-dark)', fontSize: '0.85rem' }}>
+                {farmerId ? farmerId.slice(0, 8) + '…' : '—'}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label>Full Name</label>
@@ -92,35 +106,40 @@ export default function ProfilePage({ onNavigate }: ProfilePageProps) {
               <option value="en">English</option>
               <option value="hi">Hindi</option>
               <option value="pa">Punjabi</option>
+              <option value="kn">Kannada</option>
+              <option value="te">Telugu</option>
+              <option value="mr">Marathi</option>
             </select>
           </div>
 
-          <div className="form-group">
-            <label>Village</label>
-            <input type="text" value={form.village}
-              onChange={e => setForm(f => ({ ...f, village: e.target.value }))}
-              placeholder="Village name" />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div className="form-group">
+              <label>Village</label>
+              <input type="text" value={form.village}
+                onChange={e => setForm(f => ({ ...f, village: e.target.value }))}
+                placeholder="Village name" />
+            </div>
+            <div className="form-group">
+              <label>District</label>
+              <input type="text" value={form.district}
+                onChange={e => setForm(f => ({ ...f, district: e.target.value }))}
+                placeholder="District name" />
+            </div>
           </div>
 
-          <div className="form-group">
-            <label>District</label>
-            <input type="text" value={form.district}
-              onChange={e => setForm(f => ({ ...f, district: e.target.value }))}
-              placeholder="District name" />
-          </div>
-
-          <div className="form-group">
-            <label>State</label>
-            <input type="text" value={form.state}
-              onChange={e => setForm(f => ({ ...f, state: e.target.value }))}
-              placeholder="State name" />
-          </div>
-
-          <div className="form-group">
-            <label>Land Size (acres)</label>
-            <input type="number" min="0" step="0.01" value={form.landSizeAcres}
-              onChange={e => setForm(f => ({ ...f, landSizeAcres: e.target.value }))}
-              placeholder="e.g. 2.5" />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div className="form-group">
+              <label>State</label>
+              <input type="text" value={form.state}
+                onChange={e => setForm(f => ({ ...f, state: e.target.value }))}
+                placeholder="State name" />
+            </div>
+            <div className="form-group">
+              <label>Land Size (acres)</label>
+              <input type="number" min="0" step="0.01" value={form.landSizeAcres}
+                onChange={e => setForm(f => ({ ...f, landSizeAcres: e.target.value }))}
+                placeholder="e.g. 2.5" />
+            </div>
           </div>
 
           <button type="submit" className="btn-primary" disabled={saving}>
